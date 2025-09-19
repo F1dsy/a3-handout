@@ -21,6 +21,46 @@ import Text.Megaparsec.Char (space)
 
 type Parser = Parsec Void String
 
+-- Atom ::= var
+--        | int
+--        | bool
+--        | "(" Exp ")"
+
+-- FExp ::= Atom
+--        | FExp FExp
+
+-- Exp3' ::=            (* empty *)
+--        | "**" Exp0
+
+-- Exp3 ::= Exp3'
+
+-- Exp2' ::=            (* empty *)
+--        | "*" Atom Exp2'
+--        | "/" Atom Exp2'
+
+-- Exp2 ::= Exp3 Exp2'
+
+-- Exp1' ::=            (* empty *)
+--        | "+" Exp2 Exp1'
+--        | "-" Exp2 Exp1'
+
+-- Exp1 ::= Exp2 Exp1'
+
+-- Exp0' ::=            (* empty *)
+--        | "==" Exp1 Exp0'
+
+-- Exp0 ::= Exp1 Exp0'
+
+-- Exp  ::= Exp0
+--        | “print” string Atom
+--        | “get” Atom
+--        | “put” Atom Atom
+--
+-- LExp ::= FExp
+--        | "if" Exp "then" Exp "else" Exp
+--        |
+--
+
 lexeme :: Parser a -> Parser a
 lexeme p = p <* space
 
@@ -30,7 +70,17 @@ keywords =
     "then",
     "else",
     "true",
-    "false"
+    "false",
+    "print",
+    "get",
+    "put",
+    "try",
+    "catch",
+    "let",
+    "in",
+    "loop",
+    "for",
+    "do"
   ]
 
 lVName :: Parser VName
@@ -68,6 +118,19 @@ pAtom =
       lString "(" *> pExp <* lString ")"
     ]
 
+pFExp :: Parser Exp
+pFExp = pAtom >>= chain
+  where
+    chain f =
+      choice
+        [ do
+            x' <- pAtom
+            chain $ Apply f x',
+          pure f
+        ]
+
+-- We have done an extensive amount of work,
+-- to make the following as concise as possible
 pLExp :: Parser Exp
 pLExp =
   choice
@@ -75,34 +138,79 @@ pLExp =
         <$> (lKeyword "if" *> pExp)
         <*> (lKeyword "then" *> pExp)
         <*> (lKeyword "else" *> pExp),
+      Lambda
+        <$> (lString "\\" *> lVName)
+        <*> (lString "->" *> pExp),
+      TryCatch
+        <$> (lKeyword "try" *> pExp)
+        <*> (lKeyword "catch" *> pExp),
+      Let
+        <$> (lKeyword "let" *> lVName)
+        <*> (lKeyword "=" *> pExp)
+        <*> (lKeyword "in" *> pExp),
+      ForLoop
+        <$> ((,) <$> (lKeyword "loop" *> lVName <* lString "=") <*> pExp)
+        <*> ((,) <$> (lKeyword "for" *> lVName <* lString "<") <*> pExp)
+        <*> (lKeyword "do" *> pExp),
       pFExp
     ]
 
-pExp2 :: Parser Exp
-pExp2 = pLExp >>= chain
+pExp4 :: Parser Exp
+pExp4 =
+  choice
+    [ pLExp,
+      do
+        lKeyword "print"
+        str <- lString "\"" *> many (satisfy isAlphaNum) <* lString "\""
+        Print str <$> pAtom,
+      do
+        lKeyword "get"
+        KvGet <$> pAtom,
+      do
+        lKeyword "put"
+        KvPut <$> pAtom <*> pAtom
+    ]
+
+pExp3 :: Parser Exp
+pExp3 = pExp4 >>= pExp3'
   where
-    chain x =
+    pExp3' base =
       choice
         [ do
             lString "**"
-            y <- pLExp
-            chain $ Pow x y,
-          pure x
+            Pow base <$> pExp3,
+          pure base
         ]
 
-pExp1 :: Parser Exp
-pExp1 = pLExp >>= chain
+pExp2 :: Parser Exp
+pExp2 = pExp3 >>= chain
   where
     chain x =
       choice
         [ do
             lString "*"
-            y <- pLExp
+            y <- pExp3
             chain $ Mul x y,
           do
             lString "/"
-            y <- pLExp
+            y <- pExp3
             chain $ Div x y,
+          pure x
+        ]
+
+pExp1 :: Parser Exp
+pExp1 = pExp2 >>= chain
+  where
+    chain x =
+      choice
+        [ do
+            lString "+"
+            y <- pExp2
+            chain $ Add x y,
+          do
+            lString "-"
+            y <- pExp2
+            chain $ Sub x y,
           pure x
         ]
 
@@ -112,29 +220,14 @@ pExp0 = pExp1 >>= chain
     chain x =
       choice
         [ do
-            lString "+"
+            lString "=="
             y <- pExp1
-            chain $ Add x y,
-          do
-            lString "-"
-            y <- pExp1
-            chain $ Sub x y,
+            chain $ Eql x y,
           pure x
         ]
 
 pExp :: Parser Exp
 pExp = pExp0
-
-pFExp :: Parser Exp
-pFExp =
-  choice
-    [ pAtom,
-    
-      do
-        f <- pFExp
-        x <- pFExp
-        pure $ Apply f x
-    ]
 
 parseAPL :: FilePath -> String -> Either String Exp
 parseAPL fname s = case parse (space *> pExp <* eof) fname s of

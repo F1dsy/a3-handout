@@ -47,7 +47,11 @@ tests =
           parserTest "x+y-z" $ Sub (Add (Var "x") (Var "y")) (Var "z"),
           parserTest "x+y*z" $ Add (Var "x") (Mul (Var "y") (Var "z")),
           parserTest "x*y*z" $ Mul (Mul (Var "x") (Var "y")) (Var "z"),
-          parserTest "x/y/z" $ Div (Div (Var "x") (Var "y")) (Var "z")
+          parserTest "x/y/z" $ Div (Div (Var "x") (Var "y")) (Var "z"),
+          parserTest "x**y*z" $ Mul (Pow (Var "x") (Var "y")) (Var "z"),
+          parserTest "x*y**z" $ Mul (Var "x") (Pow (Var "y") (Var "z")),
+          parserTest "x**y**z" $ Pow (Var "x") (Pow (Var "y") (Var "z")),
+          parserTest "x+y==y+x" $ Eql (Add (Var "x") (Var "y")) (Add (Var "y") (Var "x"))
         ],
       testGroup
         "Conditional expressions"
@@ -68,6 +72,31 @@ tests =
       testGroup
         "Function Apply"
         [ parserTest "x y z" $
-            Apply (Apply (Var "x") (Var "y")) (Var "z")
+            Apply (Apply (Var "x") (Var "y")) (Var "z"),
+          parserTest "x(y z)" $
+            Apply (Var "x") (Apply (Var "y") (Var "z")),
+          parserTestFail "x if x then y else z"
+        ],
+      testGroup
+        "Print, Put and Get"
+        [ parserTest "put x y" $
+            KvPut (Var "x") (Var "y"),
+          parserTest "get x + y" $
+            Add (KvGet (Var "x")) (Var "y"),
+          parserTest "getx" $
+            Var "getx",
+          parserTest "print \"foo\" x" $
+            Print "foo" (Var "x")
+        ],
+      testGroup
+        "Lambdas, let's, loops and try-catch"
+        [ parserTest "let x = y in z" $
+            Let "x" (Var "y") (Var "z"),
+          parserTest "\\x -> x" $
+            Lambda "x" (Var "x"),
+          parserTest "try a catch b" $
+            TryCatch (Var "a") (Var "b"),
+          parserTest "loop i = 0 for i < 10 do i" $
+            ForLoop ("i", CstInt 0) ("i", CstInt 10) (Var "i")
         ]
     ]

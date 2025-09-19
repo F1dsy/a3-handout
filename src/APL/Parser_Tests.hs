@@ -64,5 +64,10 @@ tests =
         "Lexing edge cases"
         [ parserTest "2 " $ CstInt 2,
           parserTest " 2" $ CstInt 2
+        ],
+      testGroup
+        "Function Apply"
+        [ parserTest "x y z" $
+            Apply (Apply (Var "x") (Var "y")) (Var "z")
         ]
     ]

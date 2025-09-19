@@ -54,9 +54,9 @@ lKeyword s = lexeme $ void $ try $ chunk s <* notFollowedBy (satisfy isAlphaNum)
 
 pBool :: Parser Bool
 pBool =
-  choice $
-    [ const True <$> lKeyword "true",
-      const False <$> lKeyword "false"
+  choice
+    [ True <$ lKeyword "true",
+      False <$ lKeyword "false"
     ]
 
 pAtom :: Parser Exp
@@ -75,8 +75,20 @@ pLExp =
         <$> (lKeyword "if" *> pExp)
         <*> (lKeyword "then" *> pExp)
         <*> (lKeyword "else" *> pExp),
-      pAtom
+      pFExp
     ]
+
+pExp2 :: Parser Exp
+pExp2 = pLExp >>= chain
+  where
+    chain x =
+      choice
+        [ do
+            lString "**"
+            y <- pLExp
+            chain $ Pow x y,
+          pure x
+        ]
 
 pExp1 :: Parser Exp
 pExp1 = pLExp >>= chain
@@ -112,6 +124,17 @@ pExp0 = pExp1 >>= chain
 
 pExp :: Parser Exp
 pExp = pExp0
+
+pFExp :: Parser Exp
+pFExp =
+  choice
+    [ pAtom,
+    
+      do
+        f <- pFExp
+        x <- pFExp
+        pure $ Apply f x
+    ]
 
 parseAPL :: FilePath -> String -> Either String Exp
 parseAPL fname s = case parse (space *> pExp <* eof) fname s of

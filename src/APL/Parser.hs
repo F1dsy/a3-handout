@@ -134,7 +134,8 @@ pFExp = pAtom >>= chain
 pLExp :: Parser Exp
 pLExp =
   choice
-    [ If
+    [ pFExp,
+      If
         <$> (lKeyword "if" *> pExp)
         <*> (lKeyword "then" *> pExp)
         <*> (lKeyword "else" *> pExp),
@@ -151,8 +152,7 @@ pLExp =
       ForLoop
         <$> ((,) <$> (lKeyword "loop" *> lVName <* lString "=") <*> pExp)
         <*> ((,) <$> (lKeyword "for" *> lVName <* lString "<") <*> pExp)
-        <*> (lKeyword "do" *> pExp),
-      pFExp
+        <*> (lKeyword "do" *> pExp)
     ]
 
 pExp4 :: Parser Exp
